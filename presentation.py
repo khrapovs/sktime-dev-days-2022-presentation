@@ -23,6 +23,25 @@
 # ## Time Series Cross-Validation
 # ![split](https://i.stack.imgur.com/fXZ6k.png)
 
+# %% [markdown] slideshow={"slide_type": "subslide"}
+# ## Typical cross-validation pipeline
+#
+# - get raw irregular data
+# - process data (aggregate, impute, align, etc.)
+# - cross-validate (repeat the following many times for different splits):
+#   - split
+#   - forecast $y$
+#   - record forecasts, residuals, etc
+# - aggregate cross-validation results
+
+# %% [markdown] slideshow={"slide_type": "subslide"}
+# ## Existing implementation fails when some data processing is required after each split operation
+#
+# - cross-validate (repeat the following many times for different splits):
+#   - split
+#   - **process data**
+#   - forecast $y$
+
 # %% [markdown] slideshow={"slide_type": "slide"}
 # # Sktime splitters
 #
@@ -33,7 +52,7 @@
 # - `CutoffSplitter`
 # - `SingleWindowSplitter`
 
-# %% [markdown] slideshow={"slide_type": "slide"}
+# %% [markdown] slideshow={"slide_type": "subslide"}
 # ```python
 # import numpy as np
 # import pandas as pd
@@ -52,6 +71,8 @@
 # ```
 
 # %% [markdown] slideshow={"slide_type": "slide"}
+# ## Toy example
+#
 # Time series example: $\left(y_1,y_2^a,y_2^b,y_4\right)$. 
 #
 # Corresponding enumeration: $(1,2,3,4)$
@@ -96,24 +117,34 @@
 # | 3      | $$(1,2,3)$$           | $$(4)$$     |
 
 # %% [markdown] slideshow={"slide_type": "slide"}
-# ### Formal definition and proposal
+# ## Formal definition and proposal
 #
-# Denote a time series index as $T=\{t(1),\ldots,t(k)\}$. Assume that it is sorted, that is $t(i+1)\geq t(i)$. Also assume that $t(i)$ can be either an integer or a date/time value.
+# - Time series index: $T=\{t(1),\ldots,t(k)\}$
+# - It is sorted: $t(i+1)\geq t(i)$
+# - $t(i)$ can be either an integer or a date/time value
 #
-# **Definition.** A time series is regular if $t(i+1)-t(i)=t(j+1)-t(j)$ for any $i,j\in\{2,\ldots,k\}$. Conversely, a time series is irregular, if there exists $i\neq j$ such that $t(i+1)-t(i)\neq t(j+1)-t(j)$.
+# **Definition.** A time series is regular if $t(i+1)-t(i)=t(j+1)-t(j)$ for any $i,j\in\{2,\ldots,k\}$.
 #
-# **Definition.** A cutoff is a reference to the index $t(s)$ such that $t(1)\leq t(s)\leq t(k)$. It separates train and test windows, $F=\{t(m_1),\ldots,t(m_f)\}$ and $P=\{t(h_1),\ldots,t(h_p)\}$, respectively. Exact definition of a train/test window depends on a specific splitter. Regardless of a splitter, $t(s)\geq t\in F$ and $t(s)< t\in P$. 
+# **Definition.** A cutoff is a reference to the index $t(s)$ such that $t(1)\leq t(s)\leq t(k)$. It separates train and test windows, $F=\{t(m_1),\ldots,t(m_f)\}$ and $P=\{t(h_1),\ldots,t(h_p)\}$, respectively. Regardless of a splitter, $t(s)\geq t\in F$ and $t(s)< t\in P$. 
 #
-# For a regular time series it is guaranteed that any cutoff $t(s)\in T$. Conversely, for irregular time series there exists $s$ such that $t(s)\notin T$.
+# For irregular time series there exists $s$ such that $t(s)\notin T$.
 
 # %% [markdown] slideshow={"slide_type": "subslide"}
-# The current state of `sktime` supports only regular time series. At the core the implementation relied on constructing train/test windows using `np.arange`, which was sufficient given the knowledge of window left and right endpoints. For example,
+# ### Original implementation (before me)
+#
+# The current state of `sktime` supports only regular time series.
+#
 # ```python
 # np.arange(train_start, train_end + 1)
 # ```
 # gave us `iloc` references to the train window.
+
+# %% [markdown] slideshow={"slide_type": "subslide"}
+# ### As of now implementation
 #
-# After a series of refactoring PRs this implementation was generalized using `pandas.Index.get_loc` and `numpy.argwhere` methods. The first one is used to obtain `iloc` reference $s$ in $t(s)$, while the second is used to get `iloc` references $\{m_1,\ldots,m_f\}$ and $\{h_1,\ldots,h_p\}$. For example,
+# Generalized using `pandas.Index.get_loc` and `numpy.argwhere` methods.
+#
+# For example,
 # ```python
 # train_end = y.get_loc(cutoff)
 # ```
@@ -121,10 +152,18 @@
 # ```python
 # np.argwhere((y >= train_start) & (y <= train_end))
 # ```
-# gives us `iloc` references to the train window. The advantage here is that we may pass an irregular time series and still get correct `iloc` indices.
+# gives us `iloc` references to the train window.
+#
+# Now we may pass an irregular time series and still get correct `iloc` indices.
 
 # %% [markdown] slideshow={"slide_type": "subslide"}
-# Going deeper into the implementation it turns out that such a refactoring is still not sufficient to treat all currently existing splitters. In particular, `y.get_loc(cutoff)` raises `KeyError` if `cutoff` does not belong to the index `y`. We propose to treat this as follows. For an irregular index $T=\{t(1),\ldots,t(k)\}$ we can construct a corresponding regular index $T^\prime=\{t^\prime(1),\ldots,t^\prime(l)\}$ such that $t(1)=t^\prime(1)$ and $t(k)=t^\prime(l)$. For such an index 
+# ### But!...
+#
+# `y.get_loc(cutoff)` raises `KeyError` if `cutoff` does not belong to the index `y`.
+#
+# **Solution:**
+#
+# For an irregular index $T=\{t(1),\ldots,t(k)\}$ construct regular index $T^\prime=\{t^\prime(1),\ldots,t^\prime(l)\}$ such that $t(1)=t^\prime(1)$ and $t(k)=t^\prime(l)$.
 # ```python
 # y_regular.get_loc(cutoff)
 # ```
@@ -132,22 +171,27 @@
 # ```python
 # np.argwhere((y_regular >= train_start) & (y_regular <= train_end))
 # ```
-# After obtaining a train and/or test windows one has to convert them back to the context of original irregular index `y`. This can be achieved by using, for example,
+#
+# After obtaining a train and/or test windows convert them back to the context of original irregular index `y`:
 # ```python
 # y.get_indexer(y_regular[train])
 # ```
 # which returns `iloc` references to `y` for only those elements of `y_regular[train]` that exist in `y`.
 
 # %% [markdown] slideshow={"slide_type": "subslide"}
-# Constructing `y_regular` for integer valued `y` is trivial:
+# ### Constructing regular index
+#
+# `y_regular` for integer valued `y`:
 # ```python
 # np.arange(y[0], y[-1] + 1)
 # ```
-# For date/time `y` one needs to know the frequency of a time series after aggregation/imputation. Then, for example,
+# For date/time `y`:
 # ```python
 # pd.period_range(y.min(), y.max(), freq=freq)
 # ```
-# produces the desired result. Currently, if one passes an irregular time index to any splitter in `sktime`, there is no robust way to guess a desired frequency since aggregation/imputation may be performed for any time unit. Hence, it is required to implement one more optional argument in splitter constructor, namely `freq`:
+# Note that `freq` is required!
+#
+# New argument `freq` at splitter construction:
 # ```python
 # def __init__(
 #     self,

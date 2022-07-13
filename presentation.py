@@ -19,6 +19,13 @@
 # ### Stanislav Khrapov, Data Scientist, Chintai
 # ![Chintai](https://media.newjobs.com/clu/xw31/xw318532284wDEx/branding/177718/Chintai-logo-637553537963924757.png)
 
+# %% [markdown] slideshow={"slide_type": "subslide"}
+# Sktime issue: [#1737](https://github.com/alan-turing-institute/sktime/issues/1737)
+#
+# Enhancement proposal: [#18](https://github.com/sktime/enhancement-proposals/blob/main/steps/18_cv_with_irregulrar_ts_data/step.md)
+#
+# This presentation: [github.com/khrapovs/sktime-dev-days-2022-presentation](https://github.com/khrapovs/sktime-dev-days-2022-presentation)
+
 # %% [markdown] slideshow={"slide_type": "slide"}
 # ## Time Series Cross-Validation
 # ![split](https://i.stack.imgur.com/fXZ6k.png)
@@ -203,3 +210,6 @@
 #     self.fh = fh
 #     self.freq = freq
 # ```
+
+# %% [markdown] slideshow={"slide_type": "slide"}
+# # Q&A
